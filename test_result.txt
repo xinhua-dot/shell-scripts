@@ -1,0 +1,22 @@
+
+The disk usage is normal：34%
+Time:2026年 03月 12日 星期四 15:43:01 CST
+The disk usage is normal：%
+Time:2026年 03月 12日 星期四 15:43:01 CST
+The disk usage is normal：%
+Time:2026年 03月 12日 星期四 15:43:01 CST
+The disk usage is normal：34%
+Time:2026年 03月 12日 星期四 15:46:46 CST
+The disk usage is normal：34%
+Time:2026年 03月 12日 星期四 15:46:46 CST
+The disk usage is normal：34%
+Time:2026年 03月 12日 星期四 15:46:46 CST
+Waring:/ has already arrived 34% bigger than 30%
+Waring:/home has already arrived 34% bigger than 30%
+Waring:/var has already arrived 34% bigger than 30%
+Waring:/ has already arrived 34% bigger than 30%
+Waring:/home has already arrived 34% bigger than 30%
+Waring:/var has already arrived 34% bigger than 30%
+Waring:/ has already arrived 34% bigger than 30%
+Waring:/home has already arrived 34% bigger than 30%
+Waring:/var has already arrived 34% bigger than 30%
