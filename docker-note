@@ -1,0 +1,324 @@
+
+cker 搭建 Nginx+PHP+MySQL 环境实战笔记
+
+🎯 项目概述
+这是一个使用 Docker 容器化技术搭建完整 Web 开发环境（Nginx + PHP + MySQL）的实战记录。通过本项目，可以掌握 Docker 基础操作、容器编排、环境配置以及常见问题排查。
+
+📦 环境架构
+┌─────────────────────────────────────————┐
+│          宿主机 (CentOS)               	│
+│  ┌──────────────┬──────────────┐   		│
+│  │  容器1: Nginx │  容器2: PHP │  		│
+│  │  端口:8080   │  端口:9000   │  		│
+│  └──────┬───────┴───────┬──────┘   		│
+│         │               │         		│
+│  ┌──────▼───────────────▼──────┐  		│
+│  │    容器3: MySQL           │   		│
+│  │    端口:3306             │   		│
+│  └─────────────────────────────┘          │
+│                                       │
+│  数据卷挂载:                            │
+│  ├─ ~/nginx-html/ → /var/www/html	    │
+│  └─ ~/nginx-conf/ → /etc/nginx/conf.d  │
+└─────────────────────────────────────————┘
+
+🚀 第一步：基础环境搭建
+
+1.1 创建目录结构
+
+# 创建代码目录和配置目录
+mkdir -p ~/nginx-html
+mkdir -p ~/nginx-conf
+
+
+1.2 第一个 Nginx 容器
+
+# 运行简单的 Nginx 容器
+docker run -d --name my-nginx -p 8080:80 nginx
+
+# 访问测试
+curl localhost:8080  # 看到 Welcome to nginx!
+
+
+📌 知识点：
+
+-d：后台运行
+
+--name：指定容器名
+
+-p 8080:80：端口映射（宿主机:容器）
+
+
+
+🐘 第二步：添加 PHP 支持
+2.1 创建 PHP 测试文件
+# 创建 PHP 文件
+echo "<?php phpinfo(); ?>" > ~/nginx-html/index.php
+
+2.2 运行 PHP-FPM 容器
+docker run -d --name php-fpm \
+  -v ~/nginx-html:/var/www/html \
+  php:7.4-fpm
+
+2.3 配置 Nginx 处理 PHP
+创建 Nginx 配置文件 ~/nginx-conf/php-site.conf：
+server {
+    listen 80;
+    root /var/www/html;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass php-fpm:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+
+2.4 重新运行 Nginx 容器（挂载配置）
+# 删除旧容器
+docker rm -f my-nginx
+
+# 运行新容器
+docker run -d --name nginx-php \
+  -p 8080:80 \
+  -v ~/nginx-html:/var/www/html \
+  -v ~/nginx-conf/php-site.conf:/etc/nginx/conf.d/default.conf \
+  nginx
+
+❗ 遇到的坑：
+错误：bash: !: event not found
+解决：使用单引号或转义感叹号
+echo '<h1>Hello</h1>' > index.html
+
+
+
+🗄️ 第三步：添加 MySQL 数据库
+3.1 创建 Docker 网络
+# 容器间通信需要网络
+docker network create webnet
+
+3.2 运行 MySQL 容器
+docker run -d \
+  --name my-wordpress-db \
+  --network webnet \
+  -e MYSQL_ROOT_PASSWORD=rootpassword \
+  -e MYSQL_DATABASE=wordpress \
+  -e MYSQL_USER=wpuser \
+  -e MYSQL_PASSWORD=wppassword \
+  mysql:5.7
+
+📌 环境变量说明：
+
+MYSQL_ROOT_PASSWORD：root 密码
+
+MYSQL_DATABASE：自动创建的数据库
+
+MYSQL_USER：普通用户
+
+MYSQL_PASSWORD：普通用户密码
+
+
+3.3 连接容器到网络
+docker network connect webnet nginx-php
+docker network connect webnet php-fpm
+
+
+
+
+📝 第四步：安装 WordPress
+4.1 下载 WordPress
+cd ~/nginx-html
+wget https://wordpress.org/latest.tar.gz
+tar -xzvf latest.tar.gz
+mv wordpress/* .
+rm -rf wordpress latest.tar.gz
+
+4.2 配置数据库连接
+cp wp-config-sample.php wp-config.php
+nano wp-config.php
+
+修改数据库配置：
+define('DB_NAME', 'wordpress');
+define('DB_USER', 'wpuser');
+define('DB_PASSWORD', 'wppassword');
+define('DB_HOST', 'my-wordpress-db');  // 容器名作为主机名
+
+
+4.3 安装 PHP MySQL 扩展
+# 进入 PHP 容器
+docker exec -it php-fpm bash
+
+# 安装扩展
+docker-php-ext-install mysqli
+docker-php-ext-enable mysqli
+
+# 退出并重启
+exit
+docker restart php-fpm
+
+❗ 常见错误：
+Your PHP installation appears to be missing the MySQL extension
+解决：安装 mysqli 扩展
+
+
+🔧 第五步：常见问题排查
+5.1 端口冲突
+# 错误：容器名已存在
+docker: Error response from daemon: Conflict... 
+
+# 解决：删除或重命名
+docker rm -f 容器名
+# 或使用不同的名称
+
+
+5.2 权限问题
+# 错误：chown: 无效的用户: "www-data:www-data"
+# 原因：CentOS 没有 www-data 用户
+
+# 解决：使用 root 或存在的用户
+chown -R root:root ~/nginx-html
+# 或使用容器内 root 用户运行
+--user root
+
+5.3 挂载类型错误
+# 错误：not a directory: unknown
+# 原因：试图将目录挂载为文件
+
+# 检查类型
+ls -la ~/nginx-conf/
+
+# 确保配置文件是文件，不是目录
+-rw-r--r--  # 文件
+drwxr-xr-x  # 目录
+
+
+5.4 数据库连接失败
+# 诊断步骤
+1. 检查容器是否在同一网络：docker network inspect webnet
+2. 测试连接：docker exec php-fpm ping my-wordpress-db
+3. 查看日志：docker logs my-wordpress-db
+
+
+5.5 Nginx 显示欢迎页而不是 PHP
+# 检查配置文件是否正确挂载
+docker exec nginx-php cat /etc/nginx/conf.d/default.conf
+
+# 检查文件是否存在
+docker exec nginx-php ls -la /var/www/html/
+
+📋 常用 Docker 命令速查
+容器管理
+# 查看运行中的容器
+docker ps
+
+# 查看所有容器（包括停止的）
+docker ps -a
+
+# 停止容器
+docker stop 容器名
+
+# 启动容器
+docker start 容器名
+
+# 重启容器
+docker restart 容器名
+
+# 删除容器
+docker rm 容器名
+docker rm -f 容器名  # 强制删除运行中的
+
+
+镜像管理
+# 查看本地镜像
+docker images
+
+# 拉取镜像
+docker pull nginx
+
+# 删除镜像
+docker rmi 镜像名
+
+
+网络管理
+# 创建网络
+docker network create 网络名
+
+# 查看网络
+docker network ls
+
+# 连接容器到网络
+docker network connect 网络名 容器名
+
+# 查看网络详情
+docker network inspect 网络名
+
+
+
+数据卷挂载
+# 挂载目录
+-v /宿主机/路径:/容器/路径
+
+# 挂载文件
+-v /宿主机/文件:/容器/文件
+
+
+进入容器
+# 交互模式进入
+docker exec -it 容器名 bash
+
+# 执行单条命令
+docker exec 容器名 命令
+
+
+查看日志
+docker logs 容器名
+docker logs 容器名 --tail 50  # 只看最后50行
+
+
+💡 核心概念理解
+1. 为什么用 Docker？
+环境隔离：每个应用在自己的容器里
+快速部署：一条命令启动服务
+环境一致：开发、测试、生产环境相同
+易于迁移：打包镜像到处运行
+
+2. 容器网络
+容器默认相互隔离
+同网络的容器可以用容器名通信
+--network 指定网络
+
+3. 数据卷挂载
+-v 宿主机路径:容器路径
+
+目的：数据持久化、方便修改
+类型：目录挂载、文件挂载
+特点：删除容器数据不丢
+
+4. 端口映射
+-p 宿主机端口:容器端口
+宿主机 8080 → 容器 80
+外部通过宿主机 IP+端口访问
+
+
+🎯 项目成果
+最终搭建的环境可以：
+✅ 运行 PHP网站（WordPress）
+✅ 连接 MySQL数据库
+✅ 自定义 Nginx配置
+✅ 容器间相互通信
+✅ 数据持久化存储
+
+
+✨ 总结心得
+Docker 不是虚拟机，是进程级别的隔离
+容器名就是主机名，同网络可直接通信
+数据卷是生命线，一定要挂载重要数据
+日志是好朋友，出问题先看日志
+网络是桥梁，容器间通信全靠它
+配置文件要细心，一个空格都可能出错
+
